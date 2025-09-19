@@ -36,13 +36,23 @@
                 db = getFirestore(app);
                 auth = getAuth(app);
                 
+                // Use the custom token if available, otherwise sign in anonymously
+                if (typeof __initial_auth_token !== 'undefined') {
+                    await signInWithCustomToken(auth, __initial_auth_token);
+                    console.log("Signed in with custom token.");
+                } else {
+                    await signInAnonymously(auth);
+                    console.log("Signed in anonymously.");
+                }
+
+                // Listen for authentication state changes and initialize the app
                 onAuthStateChanged(auth, async (user) => {
                     if (user) {
                         console.log("Authenticated as:", user.uid);
                         await setupApp(user.uid);
                     } else {
-                        console.log("Signing in anonymously...");
-                        await signInAnonymously(auth);
+                        console.error("Authentication failed. Please try again.");
+                        document.getElementById('loading').textContent = 'Otentikasi gagal. Silakan coba lagi.';
                     }
                 });
 
