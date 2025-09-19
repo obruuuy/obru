@@ -1,10 +1,384 @@
 <!DOCTYPE html>
-<html>
+<html lang="id">
 <head>
-  <title>Situs Saya</title>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Sistem Absensi Siswa</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://unpkg.com/html5-qrcode" type="text/javascript"></script>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+    <script type="module">
+        import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-app.js";
+        import { getAuth, signInAnonymously, signInWithCustomToken, onAuthStateChanged } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-auth.js";
+        import { getFirestore, doc, getDoc, addDoc, setDoc, updateDoc, deleteDoc, onSnapshot, collection, query, where, serverTimestamp } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-firestore.js";
+
+        // Global variables for Firebase
+        let app, db, auth;
+        const appId = typeof __app_id !== 'undefined' ? __app_id : 'default-app-id';
+        const firebaseConfig = typeof __firebase_config !== 'undefined' ? JSON.parse(__firebase_config) : {};
+
+        // Function to create a UUID
+        function uuidv4() {
+            return 'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'.replace(/[xy]/g, function(c) {
+                var r = Math.random() * 16 | 0, v = c == 'x' ? r : (r & 0x3 | 0x8);
+                return v.toString(16);
+            });
+        }
+        
+        // Modal functions
+        const showModal = (id) => { document.getElementById(id).classList.remove('hidden'); };
+        const hideModal = (id) => { document.getElementById(id).classList.add('hidden'); };
+
+        window.onload = async () => {
+            // Firebase Initialization and Authentication
+            try {
+                app = initializeApp(firebaseConfig);
+                db = getFirestore(app);
+                auth = getAuth(app);
+                
+                onAuthStateChanged(auth, async (user) => {
+                    if (user) {
+                        console.log("Authenticated as:", user.uid);
+                        await setupApp(user.uid);
+                    } else {
+                        console.log("Signing in anonymously...");
+                        await signInAnonymously(auth);
+                    }
+                });
+
+            } catch (error) {
+                console.error("Error initializing Firebase:", error);
+                document.getElementById('loading').textContent = 'Error saat inisialisasi aplikasi. Silakan coba lagi.';
+            }
+
+            // UI Elements
+            const dashboardSection = document.getElementById('dashboard-section');
+            const absensiSection = document.getElementById('absensi-section');
+            const toggleViewBtn = document.getElementById('toggle-view-btn');
+            const studentList = document.getElementById('student-list');
+            const addStudentBtn = document.getElementById('add-student-btn');
+            const newStudentNameInput = document.getElementById('new-student-name');
+            const newStudentClassInput = document.getElementById('new-student-class');
+            const saveNewStudentBtn = document.getElementById('save-new-student-btn');
+            const absensiStatusText = document.getElementById('absensi-status');
+            const loadingText = document.getElementById('loading');
+            const qrReader = document.getElementById('qr-reader');
+            let html5QrcodeScanner;
+
+            const setupApp = async (userId) => {
+                loadingText.classList.add('hidden');
+                dashboardSection.classList.remove('hidden');
+
+                // Toggle between teacher and student view
+                toggleViewBtn.addEventListener('click', () => {
+                    if (dashboardSection.classList.contains('hidden')) {
+                        dashboardSection.classList.remove('hidden');
+                        absensiSection.classList.add('hidden');
+                        toggleViewBtn.textContent = 'Mode Siswa';
+                        if (html5QrcodeScanner) {
+                            html5QrcodeScanner.stop().then(() => {
+                                console.log("QR code scanner stopped.");
+                            }).catch(err => {
+                                console.error("Failed to stop scanner:", err);
+                            });
+                        }
+                    } else {
+                        dashboardSection.classList.add('hidden');
+                        absensiSection.classList.remove('hidden');
+                        toggleViewBtn.textContent = 'Mode Guru';
+                        startQrScanner();
+                    }
+                });
+
+                // Add student modal
+                addStudentBtn.addEventListener('click', () => {
+                    showModal('add-student-modal');
+                });
+                document.getElementById('close-modal-btn').addEventListener('click', () => {
+                    hideModal('add-student-modal');
+                });
+                document.getElementById('cancel-add-student-btn').addEventListener('click', () => {
+                    hideModal('add-student-modal');
+                });
+
+                // Save new student to Firestore
+                saveNewStudentBtn.addEventListener('click', async () => {
+                    const studentName = newStudentNameInput.value.trim();
+                    const studentClass = newStudentClassInput.value.trim();
+
+                    if (studentName && studentClass) {
+                        try {
+                            const newStudentId = uuidv4();
+                            const studentsCollectionRef = collection(db, `artifacts/${appId}/public/data/students`);
+                            await setDoc(doc(studentsCollectionRef, newStudentId), {
+                                studentId: newStudentId,
+                                name: studentName,
+                                class: studentClass,
+                                qrCodeData: `https://[URL_DOMAIN_ANDA]/[PATH_FILE_INI]?studentId=${newStudentId}`
+                            });
+                            console.log("Siswa berhasil ditambahkan!");
+                            newStudentNameInput.value = '';
+                            newStudentClassInput.value = '';
+                            hideModal('add-student-modal');
+                        } catch (e) {
+                            console.error("Error adding student: ", e);
+                            alert('Gagal menambahkan siswa. Coba lagi.');
+                        }
+                    } else {
+                        alert('Nama dan Kelas tidak boleh kosong.');
+                    }
+                });
+
+                // Real-time student list update
+                const studentsRef = collection(db, `artifacts/${appId}/public/data/students`);
+                onSnapshot(studentsRef, (snapshot) => {
+                    studentList.innerHTML = '';
+                    snapshot.forEach((doc) => {
+                        const student = doc.data();
+                        const studentItem = document.createElement('li');
+                        studentItem.className = 'bg-white p-4 rounded-lg shadow-sm flex items-center justify-between mb-2';
+                        studentItem.innerHTML = `
+                            <div>
+                                <h3 class="font-bold text-gray-800">${student.name}</h3>
+                                <p class="text-sm text-gray-500">Kelas: ${student.class}</p>
+                            </div>
+                            <div class="flex items-center space-x-2">
+                                <button class="delete-student-btn p-2 rounded-full hover:bg-red-100 transition-colors" data-id="${student.studentId}">
+                                    <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5 text-red-500" viewBox="0 0 20 20" fill="currentColor">
+                                        <path fill-rule="evenodd" d="M9 2a1 1 0 00-.894.553L7.382 4H4a1 1 0 000 2v10a2 2 0 002 2h8a2 2 0 002-2V6a1 1 0 100-2h-3.382l-.724-1.447A1 1 0 0011 2H9zM7 8a1 1 0 012 0v6a1 1 0 11-2 0V8zm6 0a1 1 0 012 0v6a1 1 0 11-2 0V8z" clip-rule="evenodd" />
+                                    </svg>
+                                </button>
+                                <button class="show-qr-btn p-2 rounded-full hover:bg-blue-100 transition-colors" data-id="${student.studentId}" data-name="${student.name}" data-url="${student.qrCodeData}">
+                                    <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5 text-blue-500" viewBox="0 0 20 20" fill="currentColor">
+                                        <path d="M11 11.5a.5.5 0 01.5-.5h2a.5.5 0 01.5.5v2a.5.5 0 01-.5.5h-2a.5.5 0 01-.5-.5v-2zm-3-3a.5.5 0 01.5-.5h2a.5.5 0 01.5.5v2a.5.5 0 01-.5.5h-2a.5.5 0 01-.5-.5v-2zm-3-3a.5.5 0 01.5-.5h2a.5.5 0 01.5.5v2a.5.5 0 01-.5.5h-2a.5.5 0 01-.5-.5v-2zm-3-3a.5.5 0 01.5-.5h2a.5.5 0 01.5.5v2a.5.5 0 01-.5.5h-2a.5.5 0 01-.5-.5v-2z" />
+                                    </svg>
+                                </button>
+                            </div>
+                        `;
+                        studentList.appendChild(studentItem);
+                    });
+                });
+
+                // Real-time attendance list update
+                const attendanceRef = collection(db, `artifacts/${appId}/public/data/attendance`);
+                onSnapshot(attendanceRef, async (snapshot) => {
+                    const absensiList = document.getElementById('absensi-list');
+                    absensiList.innerHTML = '';
+                    for (const doc of snapshot.docs) {
+                        const absensi = doc.data();
+                        
+                        // Fetch student details from students collection
+                        const studentDoc = await getDoc(doc(db, `artifacts/${appId}/public/data/students`, absensi.studentId));
+                        const student = studentDoc.data();
+
+                        const absensiItem = document.createElement('li');
+                        absensiItem.className = 'bg-white p-4 rounded-lg shadow-sm flex justify-between items-center mb-2';
+                        absensiItem.innerHTML = `
+                            <div>
+                                <h3 class="font-bold text-gray-800">${student.name}</h3>
+                                <p class="text-sm text-gray-500">Kelas: ${student.class}</p>
+                            </div>
+                            <span class="bg-green-100 text-green-800 text-sm font-medium px-2 py-1 rounded-full">Hadir</span>
+                        `;
+                        absensiList.appendChild(absensiItem);
+                    }
+                });
+
+                // Delegated event listener for delete and show QR buttons
+                studentList.addEventListener('click', async (event) => {
+                    const deleteBtn = event.target.closest('.delete-student-btn');
+                    if (deleteBtn) {
+                        const studentId = deleteBtn.dataset.id;
+                        try {
+                             await deleteDoc(doc(db, `artifacts/${appId}/public/data/students`, studentId));
+                             console.log("Siswa berhasil dihapus!");
+                        } catch (e) {
+                             console.error("Error deleting student:", e);
+                             alert('Gagal menghapus siswa. Coba lagi.');
+                        }
+                    }
+
+                    const showQrBtn = event.target.closest('.show-qr-btn');
+                    if (showQrBtn) {
+                        const studentName = showQrBtn.dataset.name;
+                        const qrCodeUrl = showQrBtn.dataset.url;
+                        
+                        document.getElementById('qr-name').textContent = studentName;
+                        
+                        // Generate QR Code
+                        const qrCodeCanvas = document.getElementById('qr-code-canvas');
+                        Html5Qrcode.createQrCode(qrCodeUrl, { outputType: Html5Qrcode.OutputType.Canvas }, qrCodeCanvas);
+                        
+                        showModal('qr-modal');
+                    }
+                });
+
+                document.getElementById('close-qr-modal-btn').addEventListener('click', () => {
+                    hideModal('qr-modal');
+                });
+            };
+
+            const startQrScanner = () => {
+                html5QrcodeScanner = new Html5Qrcode("qr-reader");
+                const config = { fps: 10, qrbox: { width: 250, height: 250 } };
+                
+                html5QrcodeScanner.start(
+                    { facingMode: "environment" },
+                    config,
+                    async (decodedText, decodedResult) => {
+                        console.log("QR Code detected:", decodedText);
+                        absensiStatusText.textContent = 'Memproses...';
+
+                        try {
+                            const urlParams = new URLSearchParams(new URL(decodedText).search);
+                            const studentId = urlParams.get('studentId');
+
+                            if (studentId) {
+                                // Check if student exists
+                                const studentRef = doc(db, `artifacts/${appId}/public/data/students`, studentId);
+                                const studentDoc = await getDoc(studentRef);
+
+                                if (studentDoc.exists()) {
+                                    // Record attendance
+                                    const attendanceCollectionRef = collection(db, `artifacts/${appId}/public/data/attendance`);
+                                    await addDoc(attendanceCollectionRef, {
+                                        studentId: studentId,
+                                        timestamp: serverTimestamp()
+                                    });
+                                    absensiStatusText.textContent = `Absensi berhasil untuk ${studentDoc.data().name}!`;
+                                    
+                                    // Stop scanner after successful scan
+                                    setTimeout(() => {
+                                        if (html5QrcodeScanner) {
+                                            html5QrcodeScanner.stop().then(() => {
+                                                console.log("QR code scanner stopped after successful scan.");
+                                            }).catch(err => {
+                                                console.error("Failed to stop scanner:", err);
+                                            });
+                                        }
+                                    }, 2000);
+                                    
+                                } else {
+                                    absensiStatusText.textContent = 'Kode QR tidak valid.';
+                                }
+                            } else {
+                                absensiStatusText.textContent = 'Kode QR tidak valid.';
+                            }
+                        } catch (e) {
+                            console.error("Error processing QR code:", e);
+                            absensiStatusText.textContent = 'Terjadi kesalahan. Silakan coba lagi.';
+                        }
+                    },
+                    (errorMessage) => {
+                        // QR code scanning error, ignored
+                    }
+                );
+            };
+        };
+
+    </script>
+    <style>
+        body { font-family: 'Inter', sans-serif; background-color: #f3f4f6; color: #374151; }
+        .container { max-width: 800px; }
+        #qr-code-canvas { width: 100%; height: auto; border-radius: 8px; }
+        #qr-reader-container { width: 100%; }
+        #qr-reader video { width: 100% !important; height: auto !important; border-radius: 8px; }
+    </style>
 </head>
-<body>
-  <h1>Halo, Dunia!</h1>
-  <p>Ini adalah situs web pertama saya.</p>
+<body class="bg-gray-100 min-h-screen p-8 flex flex-col items-center">
+
+    <!-- Loading Screen -->
+    <div id="loading" class="text-center text-lg font-semibold text-gray-700 mt-20">
+        Memuat aplikasi...
+    </div>
+
+    <!-- Main App Container -->
+    <div id="main-app" class="container w-full">
+
+        <!-- Header -->
+        <div class="bg-white p-6 rounded-xl shadow-lg mb-6 flex justify-between items-center">
+            <h1 class="text-2xl font-bold text-gray-800">Absensi Siswa</h1>
+            <button id="toggle-view-btn" class="bg-gray-200 text-gray-700 px-4 py-2 rounded-lg font-medium transition-colors hover:bg-gray-300">
+                Mode Siswa
+            </button>
+        </div>
+
+        <!-- Dashboard Section (Guru) -->
+        <div id="dashboard-section" class="hidden">
+            <!-- Siswa Section -->
+            <div class="bg-white p-6 rounded-xl shadow-lg mb-6">
+                <div class="flex justify-between items-center mb-4">
+                    <h2 class="text-xl font-bold text-gray-800">Daftar Siswa</h2>
+                    <button id="add-student-btn" class="bg-green-500 text-white px-4 py-2 rounded-lg font-medium transition-colors hover:bg-green-600 shadow-md">
+                        Tambah Siswa
+                    </button>
+                </div>
+                <ul id="student-list" class="space-y-3">
+                    <!-- Student items will be rendered here -->
+                </ul>
+            </div>
+
+            <!-- Absensi Section -->
+            <div class="bg-white p-6 rounded-xl shadow-lg">
+                <h2 class="text-xl font-bold text-gray-800 mb-4">Absensi Hari Ini</h2>
+                <ul id="absensi-list" class="space-y-3">
+                    <!-- Attendance items will be rendered here -->
+                </ul>
+            </div>
+        </div>
+
+        <!-- Absensi Section (Siswa) -->
+        <div id="absensi-section" class="hidden text-center">
+            <div class="bg-white p-6 rounded-xl shadow-lg mb-6">
+                <h2 class="text-xl font-bold text-gray-800 mb-4">Pindai Barcode Absensi</h2>
+                <div id="qr-reader" class="w-full rounded-lg overflow-hidden"></div>
+                <p id="absensi-status" class="mt-4 font-semibold text-gray-700"></p>
+            </div>
+        </div>
+
+    </div>
+
+    <!-- Modals -->
+    <!-- Add Student Modal -->
+    <div id="add-student-modal" class="fixed inset-0 bg-gray-600 bg-opacity-50 hidden flex items-center justify-center p-4">
+        <div class="bg-white rounded-lg p-6 shadow-xl w-full max-w-sm">
+            <div class="flex justify-between items-center mb-4">
+                <h3 class="text-lg font-bold">Tambah Siswa Baru</h3>
+                <button id="close-modal-btn" class="text-gray-400 hover:text-gray-600 transition-colors">
+                    <svg xmlns="http://www.w3.org/2000/svg" class="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12" />
+                    </svg>
+                </button>
+            </div>
+            <div class="space-y-4">
+                <input type="text" id="new-student-name" placeholder="Nama Siswa" class="w-full p-3 border border-gray-300 rounded-lg focus:ring-blue-500 focus:border-blue-500 transition-colors">
+                <input type="text" id="new-student-class" placeholder="Kelas" class="w-full p-3 border border-gray-300 rounded-lg focus:ring-blue-500 focus:border-blue-500 transition-colors">
+                <div class="flex justify-end space-x-2 mt-4">
+                    <button id="cancel-add-student-btn" class="bg-gray-300 text-gray-800 px-4 py-2 rounded-lg font-medium transition-colors hover:bg-gray-400">Batal</button>
+                    <button id="save-new-student-btn" class="bg-blue-500 text-white px-4 py-2 rounded-lg font-medium transition-colors hover:bg-blue-600">Simpan</button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- QR Code Modal -->
+    <div id="qr-modal" class="fixed inset-0 bg-gray-600 bg-opacity-50 hidden flex items-center justify-center p-4">
+        <div class="bg-white rounded-lg p-6 shadow-xl w-full max-w-sm text-center">
+            <div class="flex justify-between items-center mb-4">
+                <h3 class="text-lg font-bold">QR Code Absensi</h3>
+                <button id="close-qr-modal-btn" class="text-gray-400 hover:text-gray-600 transition-colors">
+                    <svg xmlns="http://www.w3.org/2000/svg" class="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12" />
+                    </svg>
+                </button>
+            </div>
+            <p id="qr-name" class="text-md font-semibold mb-4"></p>
+            <canvas id="qr-code-canvas"></canvas>
+            <p class="mt-4 text-sm text-gray-500">
+                Arahkan siswa untuk memindai kode ini untuk absensi.
+            </p>
+        </div>
+    </div>
+
 </body>
 </html>
