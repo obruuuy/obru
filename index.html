@@ -1,474 +1,221 @@
 <!DOCTYPE html>
 <html lang="id">
 <head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Sistem Absensi Siswa</title>
-    <script src="https://cdn.tailwindcss.com"></script>
-    <script src="https://unpkg.com/html5-qrcode" type="text/javascript"></script>
-    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
-    <script type="module">
-        import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-app.js";
-        import { getAuth, signInAnonymously, signInWithCustomToken, onAuthStateChanged } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-auth.js";
-        import { getFirestore, doc, getDoc, addDoc, setDoc, updateDoc, deleteDoc, onSnapshot, collection, query, where, getDocs, serverTimestamp } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-firestore.js";
-        import { setLogLevel } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-firestore.js";
-
-        setLogLevel('debug'); // Atur tingkat log untuk debugging
-
-        // Variabel global untuk Firebase
-        let app, db, auth;
-        const appId = typeof __app_id !== 'undefined' ? __app_id : 'default-app-id';
-        const firebaseConfig = typeof __firebase_config !== 'undefined' ? JSON.parse(__firebase_config) : {};
-
-        // Fungsi untuk membuat UUID
-        function uuidv4() {
-            return 'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'.replace(/[xy]/g, function(c) {
-                var r = Math.random() * 16 | 0, v = c == 'x' ? r : (r & 0x3 | 0x8);
-                return v.toString(16);
-            });
-        }
-        
-        // Fungsi untuk modal
-        const showModal = (id) => { document.getElementById(id).classList.remove('hidden'); };
-        const hideModal = (id) => { document.getElementById(id).classList.add('hidden'); };
-        const showMessage = (message, isError = false) => {
-            const modal = document.getElementById('message-modal');
-            const content = document.getElementById('message-content');
-            content.textContent = message;
-            if (isError) {
-                content.classList.add('text-red-500');
-            } else {
-                content.classList.remove('text-red-500');
-            }
-            showModal('message-modal');
-        };
-
-        window.onload = async () => {
-            // Elemen UI
-            const dashboardSection = document.getElementById('dashboard-section');
-            const absensiSection = document.getElementById('absensi-section');
-            const toggleViewBtn = document.getElementById('toggle-view-btn');
-            const studentList = document.getElementById('student-list');
-            const addStudentBtn = document.getElementById('add-student-btn');
-            const newStudentNameInput = document.getElementById('new-student-name');
-            const newStudentClassInput = document.getElementById('new-student-class');
-            const saveNewStudentBtn = document.getElementById('save-new-student-btn');
-            const absensiStatusText = document.getElementById('absensi-status');
-            const loadingText = document.getElementById('loading');
-            const downloadAbsensiBtn = document.getElementById('download-absensi-btn');
-            let html5QrcodeScanner;
-
-            // Inisialisasi dan Otentikasi Firebase
-            loadingText.textContent = 'Memulai inisialisasi Firebase...';
-            
-            // Periksa konfigurasi sebelum inisialisasi Firebase
-            if (Object.keys(firebaseConfig).length === 0 || !firebaseConfig.projectId) {
-                loadingText.textContent = 'Error: Konfigurasi Firebase tidak ditemukan. Pastikan konfigurasi tersedia.';
-                console.error("Firebase config is missing or incomplete.");
-                return;
-            }
-
-            try {
-                app = initializeApp(firebaseConfig);
-                db = getFirestore(app);
-                auth = getAuth(app);
-                
-                loadingText.textContent = 'Mencoba otentikasi...';
-                // Gunakan token kustom jika tersedia, jika tidak masuk secara anonim
-                if (typeof __initial_auth_token !== 'undefined') {
-                    await signInWithCustomToken(auth, __initial_auth_token);
-                    console.log("Signed in with custom token.");
-                } else {
-                    await signInAnonymously(auth);
-                    console.log("Signed in anonymously.");
-                }
-
-                // Dengarkan perubahan status otentikasi dan inisialisasi aplikasi
-                onAuthStateChanged(auth, async (user) => {
-                    if (user) {
-                        console.log("Authenticated as:", user.uid);
-                        await setupApp(user.uid);
-                    } else {
-                        console.error("Authentication failed. Please try again.");
-                        loadingText.textContent = 'Otentikasi gagal. Silakan coba lagi.';
-                    }
-                });
-
-            } catch (error) {
-                console.error("Error initializing Firebase:", error);
-                loadingText.textContent = 'Error saat inisialisasi aplikasi: ' + error.message;
-            }
-
-            const setupApp = async (userId) => {
-                loadingText.classList.add('hidden');
-                dashboardSection.classList.remove('hidden');
-
-                // Alihkan antara mode guru dan siswa
-                toggleViewBtn.addEventListener('click', () => {
-                    if (dashboardSection.classList.contains('hidden')) {
-                        dashboardSection.classList.remove('hidden');
-                        absensiSection.classList.add('hidden');
-                        toggleViewBtn.textContent = 'Mode Siswa';
-                        if (html5QrcodeScanner) {
-                            html5QrcodeScanner.stop().then(() => {
-                                console.log("QR code scanner stopped.");
-                            }).catch(err => {
-                                console.error("Failed to stop scanner:", err);
-                            });
-                        }
-                    } else {
-                        dashboardSection.classList.add('hidden');
-                        absensiSection.classList.remove('hidden');
-                        toggleViewBtn.textContent = 'Mode Guru';
-                        startQrScanner();
-                    }
-                });
-
-                // Modal tambah siswa
-                addStudentBtn.addEventListener('click', () => {
-                    showModal('add-student-modal');
-                });
-                document.getElementById('close-modal-btn').addEventListener('click', () => {
-                    hideModal('add-student-modal');
-                });
-                document.getElementById('cancel-add-student-btn').addEventListener('click', () => {
-                    hideModal('add-student-modal');
-                });
-
-                // Simpan siswa baru ke Firestore
-                saveNewStudentBtn.addEventListener('click', async () => {
-                    const studentName = newStudentNameInput.value.trim();
-                    const studentClass = newStudentClassInput.value.trim();
-
-                    if (studentName && studentClass) {
-                        try {
-                            const newStudentId = uuidv4();
-                            const studentsCollectionRef = collection(db, `artifacts/${appId}/public/data/students`);
-                            await setDoc(doc(studentsCollectionRef, newStudentId), {
-                                studentId: newStudentId,
-                                name: studentName,
-                                class: studentClass,
-                                qrCodeData: `studentId=${newStudentId}`
-                            });
-                            console.log("Siswa berhasil ditambahkan!");
-                            newStudentNameInput.value = '';
-                            newStudentClassInput.value = '';
-                            hideModal('add-student-modal');
-                            showMessage('Siswa berhasil ditambahkan!');
-                        } catch (e) {
-                            console.error("Error adding student: ", e);
-                            showMessage('Gagal menambahkan siswa. Coba lagi.', true);
-                        }
-                    } else {
-                        showMessage('Nama dan Kelas tidak boleh kosong.', true);
-                    }
-                });
-
-                // Pembaruan daftar siswa secara real-time
-                const studentsRef = collection(db, `artifacts/${appId}/public/data/students`);
-                onSnapshot(studentsRef, (snapshot) => {
-                    studentList.innerHTML = '';
-                    snapshot.forEach((doc) => {
-                        const student = doc.data();
-                        const studentItem = document.createElement('li');
-                        studentItem.className = 'bg-white p-4 rounded-lg shadow-sm flex items-center justify-between mb-2';
-                        studentItem.innerHTML = `
-                            <div>
-                                <h3 class="font-bold text-gray-800">${student.name}</h3>
-                                <p class="text-sm text-gray-500">Kelas: ${student.class}</p>
-                            </div>
-                            <div class="flex items-center space-x-2">
-                                <button class="delete-student-btn p-2 rounded-full hover:bg-red-100 transition-colors" data-id="${student.studentId}">
-                                    <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5 text-red-500" viewBox="0 0 20 20" fill="currentColor">
-                                        <path fill-rule="evenodd" d="M9 2a1 1 0 00-.894.553L7.382 4H4a1 1 0 000 2v10a2 2 0 002 2h8a2 2 0 002-2V6a1 1 0 100-2h-3.382l-.724-1.447A1 1 0 0011 2H9zM7 8a1 1 0 012 0v6a1 1 0 11-2 0V8zm6 0a1 1 0 012 0v6a1 1 0 11-2 0V8z" clip-rule="evenodd" />
-                                    </svg>
-                                </button>
-                                <button class="show-qr-btn p-2 rounded-full hover:bg-blue-100 transition-colors" data-id="${student.studentId}" data-name="${student.name}" data-url="${student.qrCodeData}">
-                                    <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5 text-blue-500" viewBox="0 0 20 20" fill="currentColor">
-                                        <path d="M11 11.5a.5.5 0 01.5-.5h2a.5.5 0 01.5.5v2a.5.5 0 01-.5.5h-2a.5.5 0 01-.5-.5v-2zm-3-3a.5.5 0 01.5-.5h2a.5.5 0 01.5.5v2a.5.5 0 01-.5.5h-2a.5.5 0 01-.5-.5v-2zm-3-3a.5.5 0 01.5-.5h2a.5.5 0 01.5.5v2a.5.5 0 01-.5.5h-2a.5.5 0 01-.5-.5v-2zm-3-3a.5.5 0 01.5-.5h2a.5.5 0 01.5.5v2a.5.5 0 01-.5.5h-2a.5.5 0 01-.5-.5v-2z" />
-                                    </svg>
-                                </button>
-                            </div>
-                        `;
-                        studentList.appendChild(studentItem);
-                    });
-                }, (error) => {
-                    console.error("Error fetching students: ", error);
-                    showMessage('Gagal memuat daftar siswa. Silakan periksa koneksi atau database Anda.', true);
-                });
-
-                // Pembaruan daftar absensi secara real-time
-                const attendanceRef = collection(db, `artifacts/${appId}/public/data/attendance`);
-                onSnapshot(attendanceRef, async (snapshot) => {
-                    const absensiList = document.getElementById('absensi-list');
-                    absensiList.innerHTML = '';
-                    for (const doc of snapshot.docs) {
-                        const absensi = doc.data();
-                        
-                        // Ambil detail siswa dari koleksi students
-                        const studentDoc = await getDoc(doc(db, `artifacts/${appId}/public/data/students`, absensi.studentId));
-                        
-                        if (studentDoc.exists()) {
-                            const student = studentDoc.data();
-                            const absensiItem = document.createElement('li');
-                            const timestamp = absensi.timestamp ? new Date(absensi.timestamp.seconds * 1000).toLocaleString() : 'Tidak ada waktu';
-                            absensiItem.className = 'bg-white p-4 rounded-lg shadow-sm flex justify-between items-center mb-2';
-                            absensiItem.innerHTML = `
-                                <div>
-                                    <h3 class="font-bold text-gray-800">${student.name}</h3>
-                                    <p class="text-sm text-gray-500">Kelas: ${student.class}</p>
-                                </div>
-                                <div class="text-right">
-                                    <span class="bg-green-100 text-green-800 text-sm font-medium px-2 py-1 rounded-full">Hadir</span>
-                                    <p class="text-xs text-gray-400 mt-1">${timestamp}</p>
-                                </div>
-                            `;
-                            absensiList.appendChild(absensiItem);
-                        }
-                    }
-                }, (error) => {
-                    console.error("Error fetching attendance: ", error);
-                    showMessage('Gagal memuat daftar absensi. Silakan periksa koneksi atau database Anda.', true);
-                });
-
-                // Fungsi untuk mengunduh data absensi sebagai CSV
-                downloadAbsensiBtn.addEventListener('click', async () => {
-                    try {
-                        showMessage('Mengunduh data absensi...');
-                        const attendanceSnapshot = await getDocs(collection(db, `artifacts/${appId}/public/data/attendance`));
-                        const studentsSnapshot = await getDocs(collection(db, `artifacts/${appId}/public/data/students`));
-                        
-                        const studentsMap = {};
-                        studentsSnapshot.forEach(doc => {
-                            const student = doc.data();
-                            studentsMap[student.studentId] = student;
-                        });
-
-                        let csvContent = "Nama,Kelas,Waktu Absensi\n";
-                        attendanceSnapshot.forEach(doc => {
-                            const data = doc.data();
-                            const student = studentsMap[data.studentId];
-                            if (student) {
-                                const timestamp = data.timestamp ? new Date(data.timestamp.seconds * 1000).toLocaleString() : 'Tidak ada waktu';
-                                csvContent += `"${student.name}","${student.class}","${timestamp}"\n`;
-                            }
-                        });
-
-                        const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
-                        const link = document.createElement("a");
-                        const url = URL.createObjectURL(blob);
-                        link.setAttribute("href", url);
-                        link.setAttribute("download", `absensi-hari-ini-${new Date().toLocaleDateString('en-CA')}.csv`);
-                        link.style.visibility = 'hidden';
-                        document.body.appendChild(link);
-                        link.click();
-                        document.body.removeChild(link);
-                        hideModal('message-modal');
-                        showMessage('File berhasil diunduh!');
-                    } catch (e) {
-                        console.error("Error exporting to CSV:", e);
-                        showMessage('Gagal mengunduh file. Coba lagi.', true);
-                    }
-                });
-
-                // Delegated event listener for delete and show QR buttons
-                studentList.addEventListener('click', async (event) => {
-                    const deleteBtn = event.target.closest('.delete-student-btn');
-                    if (deleteBtn) {
-                        const studentId = deleteBtn.dataset.id;
-                        try {
-                             await deleteDoc(doc(db, `artifacts/${appId}/public/data/students`, studentId));
-                             console.log("Siswa berhasil dihapus!");
-                             showMessage('Siswa berhasil dihapus!');
-                        } catch (e) {
-                             console.error("Error deleting student:", e);
-                             showMessage('Gagal menghapus siswa. Coba lagi.', true);
-                        }
-                    }
-
-                    const showQrBtn = event.target.closest('.show-qr-btn');
-                    if (showQrBtn) {
-                        const studentName = showQrBtn.dataset.name;
-                        const qrCodeUrl = showQrBtn.dataset.url;
-                        
-                        document.getElementById('qr-name').textContent = studentName;
-                        
-                        // Buat QR Code
-                        const qrCodeCanvas = document.getElementById('qr-code-canvas');
-                        Html5Qrcode.createQrCode(qrCodeUrl, { outputType: Html5Qrcode.OutputType.Canvas }, qrCodeCanvas);
-                        
-                        showModal('qr-modal');
-                    }
-                });
-
-                document.getElementById('close-qr-modal-btn').addEventListener('click', () => {
-                    hideModal('qr-modal');
-                });
-            };
-
-            const startQrScanner = () => {
-                html5QrcodeScanner = new Html5Qrcode("qr-reader");
-                const config = { fps: 10, qrbox: { width: 250, height: 250 } };
-                
-                html5QrcodeScanner.start(
-                    { facingMode: "environment" },
-                    config,
-                    async (decodedText, decodedResult) => {
-                        console.log("QR Code detected:", decodedText);
-                        absensiStatusText.textContent = 'Memproses...';
-
-                        try {
-                            const urlParams = new URLSearchParams(decodedText);
-                            const studentId = urlParams.get('studentId');
-
-                            if (studentId) {
-                                // Periksa apakah siswa ada
-                                const studentRef = doc(db, `artifacts/${appId}/public/data/students`, studentId);
-                                const studentDoc = await getDoc(studentRef);
-
-                                if (studentDoc.exists()) {
-                                    // Catat absensi
-                                    const attendanceCollectionRef = collection(db, `artifacts/${appId}/public/data/attendance`);
-                                    await addDoc(attendanceCollectionRef, {
-                                        studentId: studentId,
-                                        timestamp: serverTimestamp()
-                                    });
-                                    absensiStatusText.textContent = `Absensi berhasil untuk ${studentDoc.data().name}!`;
-                                    
-                                } else {
-                                    absensiStatusText.textContent = 'Kode QR tidak valid.';
-                                }
-                            } else {
-                                absensiStatusText.textContent = 'Kode QR tidak valid.';
-                            }
-                        } catch (e) {
-                            console.error("Error processing QR code:", e);
-                            absensiStatusText.textContent = 'Terjadi kesalahan. Silakan coba lagi.';
-                        }
-                    },
-                    (errorMessage) => {
-                        // Kesalahan pemindaian kode QR, diabaikan
-                    }
-                );
-            };
-        };
-
-    </script>
-    <style>
-        body { font-family: 'Inter', sans-serif; background-color: #f3f4f6; color: #374151; }
-        .container { max-width: 800px; }
-        #qr-code-canvas { width: 100%; height: auto; border-radius: 8px; }
-        #qr-reader-container { width: 100%; }
-        #qr-reader video { width: 100% !important; height: auto !important; border-radius: 8px; }
-    </style>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>SQL Interaktif - SMKN Kasomalang</title>
+  <style>
+    body {
+      font-family: "Poppins", sans-serif;
+      background: #f4f6f8;
+      color: #333;
+      margin: 0;
+      padding: 20px;
+    }
+    h1, h2, h3 {
+      text-align: center;
+    }
+    h1 { color: #0077cc; }
+    .card {
+      background: white;
+      border-radius: 16px;
+      box-shadow: 0 2px 10px rgba(0,0,0,0.1);
+      padding: 20px;
+      margin: 20px auto;
+      max-width: 900px;
+    }
+    table {
+      border-collapse: collapse;
+      width: 100%;
+      margin-top: 10px;
+    }
+    th, td {
+      border: 1px solid #ccc;
+      padding: 8px;
+      text-align: left;
+    }
+    th { background: #f0f0f0; }
+    textarea {
+      width: 100%;
+      height: 60px;
+      font-family: monospace;
+      border-radius: 8px;
+      border: 1px solid #ccc;
+      padding: 10px;
+    }
+    button {
+      background: #007bff;
+      color: white;
+      border: none;
+      padding: 8px 16px;
+      border-radius: 8px;
+      cursor: pointer;
+      margin-top: 8px;
+    }
+    button:hover { background: #0056b3; }
+    input[type="text"] {
+      width: 250px;
+      padding: 8px;
+      border-radius: 8px;
+      border: 1px solid #ccc;
+      margin-top: 5px;
+    }
+    .feedback {
+      margin-top: 8px;
+      font-weight: bold;
+    }
+    .benar { color: green; }
+    .salah { color: red; }
+    #score {
+      font-size: 22px;
+      font-weight: bold;
+      text-align: center;
+      color: #007700;
+      margin-top: 20px;
+    }
+    footer {
+      text-align: center;
+      margin-top: 40px;
+      font-size: 14px;
+      color: #555;
+    }
+  </style>
 </head>
-<body class="bg-gray-100 min-h-screen p-8 flex flex-col items-center">
+<body>
 
-    <!-- Layar Pemuatan -->
-    <div id="loading" class="text-center text-lg font-semibold text-gray-700 mt-20">
-        Memuat aplikasi...
-    </div>
+  <h1>🧠 SQL </h1>
+  <h3>SMKN Kasomalang</h3>
+  <p style="text-align:center;"><b>Guru Pengampu:</b> Dani Setiawan</p>
 
-    <!-- Wadah Aplikasi Utama -->
-    <div id="main-app" class="container w-full">
+  <!-- INPUT NAMA SISWA -->
+  <div class="card" style="text-align:center;">
+    <h2>👤 Identitas Siswa</h2>
+    <label for="namaSiswa"><b>Nama Siswa:</b></label><br>
+    <input type="text" id="namaSiswa" placeholder="Masukkan nama lengkap..." required>
+  </div>
 
-        <!-- Header -->
-        <div class="bg-white p-6 rounded-xl shadow-lg mb-6 flex justify-between items-center">
-            <h1 class="text-2xl font-bold text-gray-800">Absensi Siswa</h1>
-            <button id="toggle-view-btn" class="bg-gray-200 text-gray-700 px-4 py-2 rounded-lg font-medium transition-colors hover:bg-gray-300">
-                Mode Siswa
-            </button>
-        </div>
+  <!-- MATERI PEMBELAJARAN -->
+  <div class="card">
+    <h2>📘 Materi: Dasar SQL (Structured Query Language)</h2>
+    <p><b>SQL</b> digunakan untuk mengelola data dalam basis data. Beberapa perintah utama yang harus dikuasai:</p>
+    <ul>
+      <li><b>SELECT</b> → Menampilkan data dari tabel.</li>
+      <li><b>INSERT INTO</b> → Menambahkan data baru ke tabel.</li>
+      <li><b>UPDATE</b> → Mengubah data yang sudah ada.</li>
+      <li><b>DELETE</b> → Menghapus data dari tabel.</li>
+      <li><b>ORDER BY</b> → Mengurutkan hasil berdasarkan kolom tertentu.</li>
+      <li><b>WHERE</b> → Menentukan kondisi/filter data.</li>
+      <li><b>COUNT()</b> → Menghitung jumlah baris data.</li>
+    </ul>
+  </div>
 
-        <!-- Bagian Dashboard (Guru) -->
-        <div id="dashboard-section" class="hidden">
-            <!-- Bagian Siswa -->
-            <div class="bg-white p-6 rounded-xl shadow-lg mb-6">
-                <div class="flex justify-between items-center mb-4">
-                    <h2 class="text-xl font-bold text-gray-800">Daftar Siswa</h2>
-                    <button id="add-student-btn" class="bg-green-500 text-white px-4 py-2 rounded-lg font-medium transition-colors hover:bg-green-600 shadow-md">
-                        Tambah Siswa
-                    </button>
-                </div>
-                <ul id="student-list" class="space-y-3">
-                    <!-- Item siswa akan dirender di sini -->
-                </ul>
-            </div>
+  <!-- STRUKTUR TABEL -->
+  <div class="card">
+    <h2>📊 Struktur Tabel <code>siswa</code></h2>
+    <table>
+      <tr><th>Kolom</th><th>Tipe Data</th><th>Keterangan</th></tr>
+      <tr><td>nis</td><td>INT</td><td>Nomor Induk Siswa (Primary Key)</td></tr>
+      <tr><td>nama</td><td>VARCHAR(50)</td><td>Nama lengkap siswa</td></tr>
+      <tr><td>jurusan</td><td>VARCHAR(30)</td><td>Program keahlian siswa</td></tr>
+      <tr><td>kelas</td><td>VARCHAR(10)</td><td>Kelas siswa</td></tr>
+      <tr><td>nilai</td><td>INT</td><td>Nilai rata-rata akhir</td></tr>
+    </table>
+  </div>
 
-            <!-- Bagian Absensi -->
-            <div class="bg-white p-6 rounded-xl shadow-lg">
-                <div class="flex justify-between items-center mb-4">
-                    <h2 class="text-xl font-bold text-gray-800">Absensi Hari Ini</h2>
-                    <button id="download-absensi-btn" class="bg-blue-500 text-white px-4 py-2 rounded-lg font-medium transition-colors hover:bg-blue-600 shadow-md">
-                        Download Absensi
-                    </button>
-                </div>
-                <ul id="absensi-list" class="space-y-3">
-                    <!-- Item absensi akan dirender di sini -->
-                </ul>
-            </div>
-        </div>
+  <!-- KUIS -->
+  <div id="quiz-container"></div>
+  <div id="score"></div>
 
-        <!-- Bagian Absensi (Siswa) -->
-        <div id="absensi-section" class="hidden text-center">
-            <div class="bg-white p-6 rounded-xl shadow-lg mb-6">
-                <h2 class="text-xl font-bold text-gray-800 mb-4">Pindai Barcode Absensi</h2>
-                <div id="qr-reader" class="w-full rounded-lg overflow-hidden"></div>
-                <p id="absensi-status" class="mt-4 font-semibold text-gray-700"></p>
-            </div>
-        </div>
+  <script>
+    const quizData = [
+      { soal: "1️⃣ Tampilkan semua data dari tabel siswa.", jawaban: "select * from siswa;" },
+      { soal: "2️⃣ Tampilkan kolom nama dan jurusan dari tabel siswa.", jawaban: "select nama, jurusan from siswa;" },
+      { soal: "3️⃣ Tambahkan data siswa baru (nis=206, nama='Fajar', jurusan='RPL', kelas='XII-RPL2', nilai=90).", jawaban: "insert into siswa (nis, nama, jurusan, kelas, nilai) values (206, 'fajar', 'rpl', 'xii-rpl2', 90);" },
+      { soal: "4️⃣ Ubah nilai siswa dengan NIS 205 menjadi 82.", jawaban: "update siswa set nilai = 82 where nis = 205;" },
+      { soal: "5️⃣ Hapus data siswa dengan NIS 202.", jawaban: "delete from siswa where nis = 202;" },
+      { soal: "6️⃣ Tampilkan siswa dengan jurusan RPL.", jawaban: "select * from siswa where jurusan = 'rpl';" },
+      { soal: "7️⃣ Tampilkan siswa yang nilai-nya di atas 85.", jawaban: "select * from siswa where nilai > 85;" },
+      { soal: "8️⃣ Hitung jumlah seluruh siswa di tabel siswa.", jawaban: "select count(*) from siswa;" },
+      { soal: "9️⃣ Tampilkan siswa dengan nilai tertinggi.", jawaban: "select * from siswa order by nilai desc limit 1;" },
+      { soal: "🔟 Tampilkan nama siswa dan nilai mereka, urut dari yang tertinggi ke terendah.", jawaban: "select nama, nilai from siswa order by nilai desc;" }
+    ];
 
-    </div>
+    const quizContainer = document.getElementById("quiz-container");
+    let skor = 0;
+    let totalDijawab = 0;
 
-    <!-- Modals -->
-    <!-- Modal Tambah Siswa -->
-    <div id="add-student-modal" class="fixed inset-0 bg-gray-600 bg-opacity-50 hidden flex items-center justify-center p-4">
-        <div class="bg-white rounded-lg p-6 shadow-xl w-full max-w-sm">
-            <div class="flex justify-between items-center mb-4">
-                <h3 class="text-lg font-bold">Tambah Siswa Baru</h3>
-                <button id="close-modal-btn" class="text-gray-400 hover:text-gray-600 transition-colors">
-                    <svg xmlns="http://www.w3.org/2000/svg" class="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12" />
-                    </svg>
-                </button>
-            </div>
-            <div class="space-y-4">
-                <input type="text" id="new-student-name" placeholder="Nama Siswa" class="w-full p-3 border border-gray-300 rounded-lg focus:ring-blue-500 focus:border-blue-500 transition-colors">
-                <input type="text" id="new-student-class" placeholder="Kelas" class="w-full p-3 border border-gray-300 rounded-lg focus:ring-blue-500 focus:border-blue-500 transition-colors">
-                <div class="flex justify-end space-x-2 mt-4">
-                    <button id="cancel-add-student-btn" class="bg-gray-300 text-gray-800 px-4 py-2 rounded-lg font-medium transition-colors hover:bg-gray-400">Batal</button>
-                    <button id="save-new-student-btn" class="bg-blue-500 text-white px-4 py-2 rounded-lg font-medium transition-colors hover:bg-blue-600">Simpan</button>
-                </div>
-            </div>
-        </div>
-    </div>
+    // tampilkan soal
+    quizData.forEach((item, index) => {
+      const card = document.createElement("div");
+      card.className = "card";
+      card.innerHTML = `
+        <p><b>${item.soal}</b></p>
+        <!-- 🔑 Kunci Jawaban:
+             ${item.jawaban}
+        -->
+        <textarea id="jawaban${index}" placeholder="Tulis perintah SQL di sini..."></textarea>
+        <br>
+        <button id="btn${index}" onclick="cekJawaban(${index})">Periksa Jawaban</button>
+        <div id="feedback${index}" class="feedback"></div>
+      `;
+      quizContainer.appendChild(card);
+    });
 
-    <!-- Modal QR Code -->
-    <div id="qr-modal" class="fixed inset-0 bg-gray-600 bg-opacity-50 hidden flex items-center justify-center p-4">
-        <div class="bg-white rounded-lg p-6 shadow-xl w-full max-w-sm text-center">
-            <div class="flex justify-between items-center mb-4">
-                <h3 class="text-lg font-bold">QR Code Absensi</h3>
-                <button id="close-qr-modal-btn" class="text-gray-400 hover:text-gray-600 transition-colors">
-                    <svg xmlns="http://www.w3.org/2000/svg" class="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12" />
-                    </svg>
-                </button>
-            </div>
-            <p id="qr-name" class="text-md font-semibold mb-4"></p>
-            <canvas id="qr-code-canvas"></canvas>
-            <p class="mt-4 text-sm text-gray-500">
-                Arahkan siswa untuk memindai kode ini untuk absensi.
-            </p>
-        </div>
-    </div>
-    
-    <!-- Modal Pesan Umum -->
-    <div id="message-modal" class="fixed inset-0 bg-gray-600 bg-opacity-50 hidden flex items-center justify-center p-4">
-        <div class="bg-white rounded-lg p-6 shadow-xl w-full max-w-sm text-center">
-            <p id="message-content" class="text-lg font-semibold"></p>
-            <button onclick="hideModal('message-modal')" class="mt-4 bg-blue-500 text-white px-4 py-2 rounded-lg font-medium transition-colors hover:bg-blue-600">OK</button>
-        </div>
-    </div>
+    function normalize(sql) {
+      return sql.replace(/\s+/g, ' ')
+                .trim()
+                .toLowerCase()
+                .replace(/'/g, "'");
+    }
+
+    function cekJawaban(index) {
+      const textarea = document.getElementById(`jawaban${index}`);
+      const button = document.getElementById(`btn${index}`);
+      const feedback = document.getElementById(`feedback${index}`);
+      const userAnswer = normalize(textarea.value);
+      const correctAnswer = normalize(quizData[index].jawaban);
+
+      if (!userAnswer) {
+        alert("Isi dulu jawabanmu sebelum diperiksa!");
+        return;
+      }
+
+      totalDijawab++;
+      textarea.disabled = true;
+      button.disabled = true;
+
+      if (userAnswer === correctAnswer) {
+        skor++;
+        feedback.innerHTML = "✅ Benar!";
+        feedback.className = "feedback benar";
+      } else {
+        feedback.innerHTML = "❌ Salah.";
+        feedback.className = "feedback salah";
+      }
+
+      if (totalDijawab === quizData.length) {
+        tampilkanNilaiAkhir();
+      }
+    }
+
+    function tampilkanNilaiAkhir() {
+      const nama = document.getElementById("namaSiswa").value.trim();
+      if (!nama) {
+        alert("Masukkan nama siswa terlebih dahulu sebelum mulai kuis!");
+        return;
+      }
+
+      const nilaiAkhir = (skor / quizData.length) * 100;
+      document.getElementById("score").innerHTML = `
+        🏁 <br><b>Nama Siswa:</b> ${nama}<br>
+        <b>Nilai Akhir:</b> ${skor}/10 (${nilaiAkhir.toFixed(0)}%)
+      `;
+    }
+  </script>
+
+  <footer>
+    <p>📘 Disusun oleh <b>Dani Setiawan</b>-SMKN Kasomalang</p>
+  </footer>
 
 </body>
 </html>
