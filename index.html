@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Kuis SQL Interaktif - SMKN Kasomalang</title>
+  <title>SQL Interaktif - SMKN Kasomalang</title>
   <style>
     @import url('https://fonts.googleapis.com/css2?family=Orbitron:wght@400;600&family=Poppins:wght@400;500;600&display=swap');
     
@@ -24,7 +24,7 @@
     }
 
     .container {
-      max-width: 900px;
+      max-width: 1000px;
       margin: auto;
       padding: 20px;
     }
@@ -92,6 +92,7 @@
     th, td {
       border: 1px solid rgba(0,255,255,0.3);
       padding: 8px;
+      text-align: center;
     }
 
     th {
@@ -135,29 +136,30 @@
       .card { padding: 15px; }
       textarea { height: 60px; }
       button { width: 100%; }
+      th, td { font-size: 13px; }
     }
   </style>
 </head>
 <body>
 
   <div class="container">
-    <h1>Kuis SQL Interaktif</h1>
-    <h3>SMKN Kasomalang • RPL | TSM | ATPH</h3>
+    <h1>SQL</h1>
+    <h3>SMKN Kasomalang •</h3>
     <p style="text-align:center;">Guru Pengampu: <b>Dani Setiawan</b></p>
 
     <!-- PERATURAN DAN TATA CARA -->
     <div class="card">
       <h2>⚙️ Peraturan & Tata Cara Pengisian</h2>
       <ul>
-        <li>Isi terlebih dahulu <b>Nama Siswa</b> pada kolom di bawah ini sebelum memulai kuis.</li>
+        <li>Isi terlebih dahulu <b>Nama Siswa</b> pada kolom di bawah sebelum memulai kuis.</li>
         <li>Baca setiap pertanyaan dengan seksama dan tuliskan <b>perintah SQL</b> yang benar di kolom jawaban.</li>
         <li>Gunakan huruf kecil untuk perintah SQL (contoh: <code>select * from siswa;</code>).</li>
-        <li>Setiap soal hanya dapat diperiksa <b>satu kali</b>. Setelah diklik <i>Periksa Jawaban</i>, kolom akan terkunci.</li>
-        <li>Skor akhir akan muncul secara otomatis setelah semua soal dijawab.</li>
-        <li>Nilai ditampilkan dalam format: <b>jumlah benar / total soal</b> dan <b>persentase (%)</b>.</li>
+        <li>Setiap soal hanya dapat diperiksa <b>satu kali</b>.</li>
+        <li>Skor akhir akan muncul otomatis setelah semua soal dijawab.</li>
+        <li>Nilai tampil dalam format: <b>benar / total</b> dan <b>persentase (%)</b>.</li>
         <li>Gunakan waktu dengan bijak dan hindari menutup halaman sebelum selesai.</li>
       </ul>
-      <p><i>Selamat belajar dan semoga sukses!</i> 🚀</p>
+      <p><i>Selamat belajar dan semoga sukses! 🚀</i></p>
     </div>
 
     <!-- INPUT NAMA SISWA -->
@@ -169,7 +171,6 @@
     <!-- MATERI -->
     <div class="card">
       <h2>📘 Materi Pembelajaran: SQL Dasar</h2>
-      <p>SQL (<i>Structured Query Language</i>) adalah bahasa untuk mengelola dan mengolah data pada basis data.</p>
       <ul>
         <li><b>SELECT</b> – menampilkan data</li>
         <li><b>INSERT INTO</b> – menambahkan data</li>
@@ -194,20 +195,38 @@
       </table>
     </div>
 
+    <!-- DATA SISWA -->
+    <div class="card">
+      <h2>📋 Data Siswa SMKN Kasomalang</h2>
+      <table>
+        <tr><th>NIS</th><th>Nama</th><th>Jurusan</th><th>Kelas</th><th>Nilai</th></tr>
+        <tr><td>201</td><td>Andi Permana</td><td>RPL</td><td>XII-RPL1</td><td>85</td></tr>
+        <tr><td>202</td><td>Siti Rahma</td><td>TSM</td><td>XII-TSM1</td><td>88</td></tr>
+        <tr><td>203</td><td>Dewi Kartika</td><td>ATPH</td><td>XII-ATPH1</td><td>92</td></tr>
+        <tr><td>204</td><td>Rizky Saputra</td><td>RPL</td><td>XII-RPL2</td><td>89</td></tr>
+        <tr><td>205</td><td>Yuli Andriani</td><td>TSM</td><td>XII-TSM2</td><td>81</td></tr>
+        <tr><td>206</td><td>Fajar Hidayat</td><td>RPL</td><td>XII-RPL2</td><td>90</td></tr>
+        <tr><td>207</td><td>Indah Lestari</td><td>ATPH</td><td>XII-ATPH2</td><td>84</td></tr>
+        <tr><td>208</td><td>Budi Hartono</td><td>TSM</td><td>XII-TSM2</td><td>77</td></tr>
+        <tr><td>209</td><td>Nisa Amalia</td><td>RPL</td><td>XII-RPL1</td><td>93</td></tr>
+        <tr><td>210</td><td>Agus Setiawan</td><td>ATPH</td><td>XII-ATPH1</td><td>80</td></tr>
+      </table>
+    </div>
+
     <!-- KUIS -->
     <div id="quiz-container"></div>
     <div id="score"></div>
 
-    <footer>© 2025 Dani Setiawan – SMKN Kasomalang | Desain Futuristik oleh ChatGPT</footer>
+    <footer>© 2025 Dani Setiawan – SMKN Kasomalang </footer>
   </div>
 
   <script>
     const quizData = [
       { soal: "1️⃣ Tampilkan semua data dari tabel siswa.", jawaban: "select * from siswa;" },
       { soal: "2️⃣ Tampilkan kolom nama dan jurusan dari tabel siswa.", jawaban: "select nama, jurusan from siswa;" },
-      { soal: "3️⃣ Tambahkan data siswa baru (nis=206, nama='Fajar', jurusan='RPL', kelas='XII-RPL2', nilai=90).", jawaban: "insert into siswa (nis, nama, jurusan, kelas, nilai) values (206, 'fajar', 'rpl', 'xii-rpl2', 90);" },
+      { soal: "3️⃣ Tambahkan data siswa baru (nis=211, nama='Ahmad', jurusan='RPL', kelas='XII-RPL3', nilai=91).", jawaban: "insert into siswa (nis, nama, jurusan, kelas, nilai) values (211, 'ahmad', 'rpl', 'xii-rpl3', 91);" },
       { soal: "4️⃣ Ubah nilai siswa dengan NIS 205 menjadi 82.", jawaban: "update siswa set nilai = 82 where nis = 205;" },
-      { soal: "5️⃣ Hapus data siswa dengan NIS 202.", jawaban: "delete from siswa where nis = 202;" },
+      { soal: "5️⃣ Hapus data siswa dengan NIS 208.", jawaban: "delete from siswa where nis = 208;" },
       { soal: "6️⃣ Tampilkan siswa dengan jurusan RPL.", jawaban: "select * from siswa where jurusan = 'rpl';" },
       { soal: "7️⃣ Tampilkan siswa yang nilai-nya di atas 85.", jawaban: "select * from siswa where nilai > 85;" },
       { soal: "8️⃣ Hitung jumlah seluruh siswa di tabel siswa.", jawaban: "select count(*) from siswa;" },
