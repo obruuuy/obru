@@ -3,128 +3,203 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>SQL Interaktif - SMKN Kasomalang</title>
+  <title>Kuis SQL Interaktif - SMKN Kasomalang</title>
   <style>
+    @import url('https://fonts.googleapis.com/css2?family=Orbitron:wght@400;600&family=Poppins:wght@400;500;600&display=swap');
+    
     body {
-      font-family: "Poppins", sans-serif;
-      background: #f4f6f8;
-      color: #333;
+      font-family: 'Poppins', sans-serif;
+      background: radial-gradient(circle at top, #0f2027, #203a43, #2c5364);
+      color: #f8f8f8;
       margin: 0;
-      padding: 20px;
+      padding: 0;
     }
+
     h1, h2, h3 {
       text-align: center;
+      font-family: 'Orbitron', sans-serif;
+      text-transform: uppercase;
+      color: #00ffff;
+      text-shadow: 0 0 8px #00ffff, 0 0 20px #0099ff;
     }
-    h1 { color: #0077cc; }
-    .card {
-      background: white;
-      border-radius: 16px;
-      box-shadow: 0 2px 10px rgba(0,0,0,0.1);
-      padding: 20px;
-      margin: 20px auto;
+
+    .container {
       max-width: 900px;
+      margin: auto;
+      padding: 20px;
     }
-    table {
-      border-collapse: collapse;
+
+    .card {
+      background: rgba(255, 255, 255, 0.05);
+      border: 1px solid rgba(0, 255, 255, 0.3);
+      border-radius: 20px;
+      padding: 20px;
+      margin: 20px 0;
+      box-shadow: 0 0 15px rgba(0, 255, 255, 0.2);
+      transition: 0.3s;
+    }
+
+    .card:hover {
+      box-shadow: 0 0 25px rgba(0, 255, 255, 0.6);
+    }
+
+    input[type="text"], textarea {
       width: 100%;
-      margin-top: 10px;
-    }
-    th, td {
-      border: 1px solid #ccc;
-      padding: 8px;
-      text-align: left;
-    }
-    th { background: #f0f0f0; }
-    textarea {
-      width: 100%;
-      height: 60px;
-      font-family: monospace;
-      border-radius: 8px;
-      border: 1px solid #ccc;
-      padding: 10px;
-    }
-    button {
-      background: #007bff;
-      color: white;
+      border-radius: 10px;
       border: none;
-      padding: 8px 16px;
-      border-radius: 8px;
+      padding: 10px;
+      font-size: 15px;
+      background: rgba(255, 255, 255, 0.1);
+      color: #fff;
+      font-family: monospace;
+      outline: none;
+    }
+
+    textarea {
+      height: 70px;
+      resize: none;
+    }
+
+    button {
+      background: linear-gradient(90deg, #00ffff, #0077ff);
+      color: #000;
+      font-weight: bold;
+      border: none;
+      border-radius: 10px;
+      padding: 10px 20px;
+      margin-top: 10px;
       cursor: pointer;
-      margin-top: 8px;
+      transition: 0.3s;
     }
-    button:hover { background: #0056b3; }
-    input[type="text"] {
-      width: 250px;
+
+    button:hover {
+      transform: scale(1.05);
+      box-shadow: 0 0 15px #00ffff;
+    }
+
+    ul {
+      list-style: square;
+      margin-left: 20px;
+    }
+
+    table {
+      width: 100%;
+      border-collapse: collapse;
+      margin-top: 10px;
+      color: #eee;
+    }
+
+    th, td {
+      border: 1px solid rgba(0,255,255,0.3);
       padding: 8px;
-      border-radius: 8px;
-      border: 1px solid #ccc;
-      margin-top: 5px;
     }
+
+    th {
+      background: rgba(0,255,255,0.2);
+      color: #00ffff;
+      text-transform: uppercase;
+    }
+
     .feedback {
+      font-weight: bold;
       margin-top: 8px;
-      font-weight: bold;
     }
-    .benar { color: green; }
-    .salah { color: red; }
+
+    .benar {
+      color: #00ffcc;
+      text-shadow: 0 0 10px #00ffcc;
+    }
+
+    .salah {
+      color: #ff0055;
+      text-shadow: 0 0 10px #ff0055;
+    }
+
     #score {
-      font-size: 22px;
-      font-weight: bold;
+      font-family: 'Orbitron', sans-serif;
       text-align: center;
-      color: #007700;
+      font-size: 22px;
+      color: #00ffff;
+      text-shadow: 0 0 10px #00ffff;
       margin-top: 20px;
     }
+
     footer {
       text-align: center;
-      margin-top: 40px;
+      color: #aaa;
+      margin: 30px 0;
       font-size: 14px;
-      color: #555;
+    }
+
+    @media (max-width: 600px) {
+      .card { padding: 15px; }
+      textarea { height: 60px; }
+      button { width: 100%; }
     }
   </style>
 </head>
 <body>
 
-  <h1>🧠 SQL </h1>
-  <h3>SMKN Kasomalang</h3>
-  <p style="text-align:center;"><b>Guru Pengampu:</b> Dani Setiawan</p>
+  <div class="container">
+    <h1>Kuis SQL Interaktif</h1>
+    <h3>SMKN Kasomalang • RPL | TSM | ATPH</h3>
+    <p style="text-align:center;">Guru Pengampu: <b>Dani Setiawan</b></p>
 
-  <!-- INPUT NAMA SISWA -->
-  <div class="card" style="text-align:center;">
-    <h2>👤 Identitas Siswa</h2>
-    <label for="namaSiswa"><b>Nama Siswa:</b></label><br>
-    <input type="text" id="namaSiswa" placeholder="Masukkan nama lengkap..." required>
+    <!-- PERATURAN DAN TATA CARA -->
+    <div class="card">
+      <h2>⚙️ Peraturan & Tata Cara Pengisian</h2>
+      <ul>
+        <li>Isi terlebih dahulu <b>Nama Siswa</b> pada kolom di bawah ini sebelum memulai kuis.</li>
+        <li>Baca setiap pertanyaan dengan seksama dan tuliskan <b>perintah SQL</b> yang benar di kolom jawaban.</li>
+        <li>Gunakan huruf kecil untuk perintah SQL (contoh: <code>select * from siswa;</code>).</li>
+        <li>Setiap soal hanya dapat diperiksa <b>satu kali</b>. Setelah diklik <i>Periksa Jawaban</i>, kolom akan terkunci.</li>
+        <li>Skor akhir akan muncul secara otomatis setelah semua soal dijawab.</li>
+        <li>Nilai ditampilkan dalam format: <b>jumlah benar / total soal</b> dan <b>persentase (%)</b>.</li>
+        <li>Gunakan waktu dengan bijak dan hindari menutup halaman sebelum selesai.</li>
+      </ul>
+      <p><i>Selamat belajar dan semoga sukses!</i> 🚀</p>
+    </div>
+
+    <!-- INPUT NAMA SISWA -->
+    <div class="card" style="text-align:center;">
+      <h2>👤 Identitas Siswa</h2>
+      <input type="text" id="namaSiswa" placeholder="Masukkan nama lengkap..." required>
+    </div>
+
+    <!-- MATERI -->
+    <div class="card">
+      <h2>📘 Materi Pembelajaran: SQL Dasar</h2>
+      <p>SQL (<i>Structured Query Language</i>) adalah bahasa untuk mengelola dan mengolah data pada basis data.</p>
+      <ul>
+        <li><b>SELECT</b> – menampilkan data</li>
+        <li><b>INSERT INTO</b> – menambahkan data</li>
+        <li><b>UPDATE</b> – memperbarui data</li>
+        <li><b>DELETE</b> – menghapus data</li>
+        <li><b>WHERE</b> – menyaring data dengan kondisi</li>
+        <li><b>ORDER BY</b> – mengurutkan data</li>
+        <li><b>COUNT()</b> – menghitung jumlah data</li>
+      </ul>
+    </div>
+
+    <!-- STRUKTUR TABEL -->
+    <div class="card">
+      <h2>📊 Struktur Tabel: siswa</h2>
+      <table>
+        <tr><th>Kolom</th><th>Tipe Data</th><th>Keterangan</th></tr>
+        <tr><td>nis</td><td>INT</td><td>Nomor Induk Siswa</td></tr>
+        <tr><td>nama</td><td>VARCHAR(50)</td><td>Nama Lengkap</td></tr>
+        <tr><td>jurusan</td><td>VARCHAR(30)</td><td>Program Keahlian</td></tr>
+        <tr><td>kelas</td><td>VARCHAR(10)</td><td>Kelas Siswa</td></tr>
+        <tr><td>nilai</td><td>INT</td><td>Nilai Akhir</td></tr>
+      </table>
+    </div>
+
+    <!-- KUIS -->
+    <div id="quiz-container"></div>
+    <div id="score"></div>
+
+    <footer>© 2025 Dani Setiawan – SMKN Kasomalang | Desain Futuristik oleh ChatGPT</footer>
   </div>
-
-  <!-- MATERI PEMBELAJARAN -->
-  <div class="card">
-    <h2>📘 Materi: Dasar SQL (Structured Query Language)</h2>
-    <p><b>SQL</b> digunakan untuk mengelola data dalam basis data. Beberapa perintah utama yang harus dikuasai:</p>
-    <ul>
-      <li><b>SELECT</b> → Menampilkan data dari tabel.</li>
-      <li><b>INSERT INTO</b> → Menambahkan data baru ke tabel.</li>
-      <li><b>UPDATE</b> → Mengubah data yang sudah ada.</li>
-      <li><b>DELETE</b> → Menghapus data dari tabel.</li>
-      <li><b>ORDER BY</b> → Mengurutkan hasil berdasarkan kolom tertentu.</li>
-      <li><b>WHERE</b> → Menentukan kondisi/filter data.</li>
-      <li><b>COUNT()</b> → Menghitung jumlah baris data.</li>
-    </ul>
-  </div>
-
-  <!-- STRUKTUR TABEL -->
-  <div class="card">
-    <h2>📊 Struktur Tabel <code>siswa</code></h2>
-    <table>
-      <tr><th>Kolom</th><th>Tipe Data</th><th>Keterangan</th></tr>
-      <tr><td>nis</td><td>INT</td><td>Nomor Induk Siswa (Primary Key)</td></tr>
-      <tr><td>nama</td><td>VARCHAR(50)</td><td>Nama lengkap siswa</td></tr>
-      <tr><td>jurusan</td><td>VARCHAR(30)</td><td>Program keahlian siswa</td></tr>
-      <tr><td>kelas</td><td>VARCHAR(10)</td><td>Kelas siswa</td></tr>
-      <tr><td>nilai</td><td>INT</td><td>Nilai rata-rata akhir</td></tr>
-    </table>
-  </div>
-
-  <!-- KUIS -->
-  <div id="quiz-container"></div>
-  <div id="score"></div>
 
   <script>
     const quizData = [
@@ -144,7 +219,6 @@
     let skor = 0;
     let totalDijawab = 0;
 
-    // tampilkan soal
     quizData.forEach((item, index) => {
       const card = document.createElement("div");
       card.className = "card";
@@ -164,8 +238,7 @@
     function normalize(sql) {
       return sql.replace(/\s+/g, ' ')
                 .trim()
-                .toLowerCase()
-                .replace(/'/g, "'");
+                .toLowerCase();
     }
 
     function cekJawaban(index) {
@@ -176,7 +249,7 @@
       const correctAnswer = normalize(quizData[index].jawaban);
 
       if (!userAnswer) {
-        alert("Isi dulu jawabanmu sebelum diperiksa!");
+        alert("Isi jawabanmu dulu ya!");
         return;
       }
 
@@ -193,29 +266,21 @@
         feedback.className = "feedback salah";
       }
 
-      if (totalDijawab === quizData.length) {
-        tampilkanNilaiAkhir();
-      }
+      if (totalDijawab === quizData.length) tampilkanNilaiAkhir();
     }
 
     function tampilkanNilaiAkhir() {
       const nama = document.getElementById("namaSiswa").value.trim();
       if (!nama) {
-        alert("Masukkan nama siswa terlebih dahulu sebelum mulai kuis!");
+        alert("Masukkan nama siswa dulu di atas!");
         return;
       }
-
       const nilaiAkhir = (skor / quizData.length) * 100;
       document.getElementById("score").innerHTML = `
-        🏁 <br><b>Nama Siswa:</b> ${nama}<br>
+        <br>🏁 <b>Nama Siswa:</b> ${nama}<br>
         <b>Nilai Akhir:</b> ${skor}/10 (${nilaiAkhir.toFixed(0)}%)
       `;
     }
   </script>
-
-  <footer>
-    <p>📘 Disusun oleh <b>Dani Setiawan</b>-SMKN Kasomalang</p>
-  </footer>
-
 </body>
 </html>
